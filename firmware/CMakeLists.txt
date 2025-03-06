@@ -16,15 +16,7 @@ set(HUNTER_PICO_EXAMPLES_PATH ${PROJECT_SOURCE_DIR})
 pico_sdk_init()
 
 # Add multi example
-add_subdirectory(term1)
-add_subdirectory(ps2kb)
-add_subdirectory(clocked_input)
-add_subdirectory(ps2)
-add_subdirectory(simple)
-add_subdirectory(ps3)
-add_subdirectory(ps4)
-add_subdirectory(term2)
-add_subdirectory(uart)
+add_subdirectory(term)
 
 add_compile_options(-Wall
         -Wno-format          # int != int32_t as far as the compiler is concerned because gcc has int32_t as long int
