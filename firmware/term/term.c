@@ -73,9 +73,9 @@ static void on_host_rx() {
 }
 
 void kbd_handler(int32_t scan_code) {
-  printf("handler kb event char %x\n", scan_code);
+  //printf("handler kb event char %x\n", scan_code);
   scan_code = scan_code | KB_MASK;
-  printf("handler kb event with mask %x\n", scan_code);
+  //printf("handler kb event with mask %x\n", scan_code);
   if (!queue_try_add(&input_queue, &scan_code)) {
     printf("FIFO was full\n");
   }
@@ -138,7 +138,7 @@ int main(){
     //printf("main: event: %x\n", data);
     if(is_from_keyboard(event)) {
       ch = process_key_event(data);
-      printf("main: from keyboard %d\n", ch);
+      //printf("main: from keyboard %d\n", ch);
       if (ch >= 0) {
         host_putc(ch);
         // writeChar(ch);     // Local echo
