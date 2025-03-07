@@ -3,37 +3,19 @@
 #include "pico/stdlib.h"
 #include "vga16_graphics.h"
 
+typedef (void (*ByteHandler)(int32t));
+static ByteHandler byte_handler = command_byte_handler;
 
-const uint8_t ASCII_MASK = 0x80;
+static uint8_t stack_bytes_remaining = 0;
+static uint16_t stack_temp = 0;
 
-enum opcodes {OC_ERROR=0x80,      OC_HELLO= 0x81,  OC_PUSH8=0x82, OC_PUSH16=0x83,
-              OC_CURSOR_TO=0x84,  OK_HOME=0x85,    OC_CHAR=0x86,    OC_DROP=0x87,
-              OC_RECT=0x88,       OC_TEXT_COLOR=0x89, OC_STACK=0x8a, OC_HOME=0x8b,
-	      OC_VGA_TEST=0x8c};
-
+const ESCAPE = 0x1b;
 
 #define MAX_STACK 64
 static uint16_t stack[MAX_STACK];
 static uint16_t i_stack = 0;
 
-static uint8_t opcode = OC_ERROR;
-static uint8_t args[5];
-static uint8_t arg_bytes_remaining = 0;
-static uint8_t arg_bytes_read = 0;
-
-static uint8_t get_arg_len(uint8_t opcode) {
-  uint8_t result = 0;
-  switch(opcode) {
-    case OC_PUSH8:
-      result = 1;
-      break;
-    case OC_PUSH16:
-      result = 2;
-      break;
-  }
-  return result;
-}
-
+// Dump the stack.
 static void dump_stack() {
   printf("stack:: %d\n", i_stack);
   for(int i=0; i < i_stack; i++) {
@@ -41,6 +23,7 @@ static void dump_stack() {
   }
 }
 
+// Run a vga test.
 static void vga_test() {
   char buf[100];
   printf("vga test\n");
@@ -55,44 +38,39 @@ static void vga_test() {
   writeString("***row 5 col 50");
 }
 
-static void process_instruction(uint8_t opcode, uint8_t *args) {
+// Handles the byte after we see an escape.
+static void escape_byte_handler(uint8_t ch) {
   uint16_t x, y, w, h, c;
 
-  //printf("process ins: %x ", opcode);
-
-  if ((opcode & ASCII_MASK) == 0) {
-    //printf("ascii code\n");
-    writeChar(opcode);
-    return;
-  }
+  printf("escape byte handler: %x ", ch);
 
   //printf("command\n");
-  switch(opcode) {
+  switch(ch) {
     case OC_ERROR:
       printf("ERROR\n");
       writeChar('?');
       break;
-     case OC_HELLO:
+     case 'h':
       clearScreen();
       writeString("hello\n");
       break;
-    case OC_PUSH8:
-      printf("push-8 %hhd\n", args[0]);
-      stack[i_stack++] = (uint16_t)args[0];
-      dump_stack();
+    case '1':
+      printf("push-8\n");
+      stack_bytes_remaining = 1;
+      stack_byte_handler = stack_byte_handler;
       break;
-    case OC_PUSH16:
-      printf("push-16 %x %x\n", args[0], args[1]);
-      stack[i_stack++] = (uint16_t)args[0] << 8 | (uint16_t)args[1];
-      dump_stack();
+    case '2':
+      printf("push-16\n");
+      stack_bytes_remaining = 2;
+      stack_byte_handler = stack_byte_handler;
       break;
-    case OC_CHAR:
+    case 'P':
       writeChar(stack[--i_stack]);
       break;
-    case OC_DROP:
+    case 'D':
       i_stack--;
       break;
-    case OC_RECT:
+    case 'r':
       printf("rect\n");
       dump_stack();
       c = stack[--i_stack];
@@ -103,47 +81,58 @@ static void process_instruction(uint8_t opcode, uint8_t *args) {
       printf("rect %hx %hx %hx %hx %hx\n", x, y, w, h, c);
       fillRect(x, y, w, h, c);
       break;
-    case OC_HOME:
+    case 'h':
       printf("home\n");
       setCursor(0, 0);
       break;
-    case OC_CURSOR_TO:
+    case 'p':
       x = stack[--i_stack];
       y = stack[--i_stack];
       setTextPosition(x, y);
       break;
-    case OC_TEXT_COLOR:
+    case 'c':
       setTextColor(stack[--i_stack]);
       break;
-    case OC_STACK:
+    case 'S':
       dump_stack();
+    case 'X':
+      printf("Protocol Reset!\n");
+      stack_bytes_remaining = 0;
+      i_stack = 0;
+      byte_handler = ground_byte_handler;
       break;
-    case OC_VGA_TEST:
+    case 'T':
       vga_test();
       break;
     default:
-      printf("%x???\n", opcode);
+      printf("%x???\n", ch);
+  }
+}
+
+// Handles pushing values onto the stack after ESC 1 or ESC 2.
+static void stack_byte_handler(uint8_t ch) {
+  if (stack_bytes_remaining == 0) {
+    printf("Error: stack byte handler called with no more bytes\n");
+  } else {
+    stack_temp = (stack_temp << 8) | ch;
+    stack_bytes_remaining--;
+  }
+
+  if (stack_bytes_remaining == 0) {
+    byte_handler = command_byte_handler;
+  }
+}
+
+// Basic byte handler, deals with everything except the escape commands.
+static void ground_byte_handler(uint8_t b) {
+  if (b == ESCAPE) {
+    byte_handler = escape_byte_handler;
+  } else {
+    writeChar(b);
   }
 }
 
 void process_byte(uint8_t b) {
-  //printf("process byte: %x %d %d\n", b, arg_bytes_remaining, arg_bytes_read);
-
-  if (arg_bytes_remaining == 0) {
-    opcode = b;
-    arg_bytes_remaining = get_arg_len(opcode);
-    arg_bytes_read = 0;
-  } else {
-    args[arg_bytes_read++] = b;
-    arg_bytes_remaining--;
-  }
-
-  //printf("p2: %x %d %d\n", b, arg_bytes_remaining, arg_bytes_read);
-
-  if(arg_bytes_remaining == 0) {
-    process_instruction(opcode, args);
-    arg_bytes_read = 0;
-    opcode = OC_ERROR;
-  }
+  byte_handler(b);
 }
 
