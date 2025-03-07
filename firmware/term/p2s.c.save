@@ -1,0 +1,153 @@
+#include <stdio.h>
+
+#include "pico/stdlib.h"
+#include "hardware/clocks.h"
+#include "hardware/pio.h"
+
+#include "ps2.pio.h"
+
+// KBD data and clock inputs must be consecutive with
+// data in the lower position.
+//#define DAT_GPIO 14 // PS/2 data
+//#define CLK_GPIO 15 // PS/2 clock
+
+#define DAT_GPIO 26 // PS/2 data
+#define CLK_GPIO 27 // PS/2 clock
+
+//#define CLK_GPIO 26 // PS/2 clock
+//#define DAT_GPIO 27 // PS/2 data
+
+#define BASE_GPIO DAT_GPIO
+
+static void pin_input_pu(uint8_t p) {
+  gpio_init(p);
+  gpio_set_dir(p, false);
+  gpio_disable_pulls(p);
+}
+
+static void pin_output(uint8_t p) {
+  gpio_init(p);
+  gpio_set_drive_strength(p, GPIO_DRIVE_STRENGTH_4MA);
+  gpio_set_dir(p, true);
+}
+
+static void pin_write(uint8_t p, uint8_t v) {
+  gpio_put(p, v ? 1: 0);
+}
+
+static void setup_pins(uint8_t pinData, uint8_t pinClock)
+{
+  printf("new setup\n");
+
+  // Set pins to output
+  pin_output(pinClock);
+  pin_output(pinData);
+
+  // Release clock
+  //pinMode(pinClock, INPUT_PULLUP);
+  pin_input_pu(pinClock);
+
+  while(gpio_get(pinClock) != 0);
+
+  // Release data line (which keeps it high for the stop bit)
+  //pinMode(pinData, INPUT_PULLUP);
+  pin_input_pu(pinData);
+
+  //Wait for data low, which would be the ack from keyboard
+  while(gpio_get(pinData) != 0);  
+}
+
+
+#define KBD_PIO pio1
+static uint kbd_sm;
+static uint8_t pio_irq;
+
+//static void pio_irq_func() {
+//  printf("kbd data!\n");
+//}
+
+void kbd_init(void (*kbd_handler)()) {
+  // init KBD pins to input
+
+  printf("PS/2 KDB example\n");
+  setup_pins(DAT_GPIO, CLK_GPIO);
+
+  // get a state machine
+  kbd_sm = pio_claim_unused_sm(KBD_PIO, true);
+
+  // copy program to SM memory
+  uint offset = pio_add_program(KBD_PIO, &ps2kbd_program);
+
+  // Set pin directions via pio call (not sure this is required)
+  pio_sm_set_consecutive_pindirs(KBD_PIO, kbd_sm, BASE_GPIO, 2, false);
+
+  // program the start and wrap SM registers
+  pio_sm_config c = ps2kbd_program_get_default_config(offset);
+
+  // Set the base input pin. pin index 0 is DAT, index 1 is CLK
+  sm_config_set_in_pins(&c, BASE_GPIO);
+
+  // Shift 11 bits to the right, autopush enabled
+  sm_config_set_in_shift(&c, true, true, 11);
+
+  // Deeper FIFO as we're not doing any TX
+  sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+
+  // We don't expect clock faster than 16KHz
+  float div = (float)clock_get_hz(clk_sys) / (8 * 16000);
+  sm_config_set_clkdiv(&c, div);
+
+  // Ready to go
+  pio_sm_init(KBD_PIO, kbd_sm, offset, &c);
+  pio_sm_set_enabled(KBD_PIO, kbd_sm, true);
+
+  pio_irq = pio_get_irq_num(KBD_PIO, 0);
+  if (irq_get_exclusive_handler(pio_irq)) {
+    pio_irq++;
+    if (irq_get_exclusive_handler(pio_irq)) {
+      panic("All IRQs are in use");
+    }
+  }
+
+  // Enable interrupt
+  irq_add_shared_handler(pio_irq, kbd_handler, PICO_SHARED_IRQ_HANDLER_DEFAULT_ORDER_PRIORITY); // Add a shared IRQ handler
+  irq_set_enabled(pio_irq, true); // Enable the IRQ
+  const uint irq_index = pio_irq - pio_get_irq_num(KBD_PIO, 0); // Get index of the IRQ
+  pio_set_irqn_source_enabled(KBD_PIO, irq_index, pio_get_rx_fifo_not_empty_interrupt_source(kbd_sm), true); // Set pio to tell us when the FIFO is NOT empty
+
+}
+
+int32_t kbd_getc(void) {
+  // pull a scan code from the PIO SM fifo
+  if (!pio_sm_is_rx_fifo_empty(KBD_PIO, kbd_sm)) {
+    int32_t k = (KBD_PIO->rxf[kbd_sm] >> 22) & 0xff;
+    printf("key: %x\n", k);
+    return k;
+  }
+  return -1;
+}
+
+int32_t kbd_getc_wait(void) {
+  // pull a scan code from the PIO SM fifo
+  while (pio_sm_is_rx_fifo_empty(KBD_PIO, kbd_sm))
+    tight_loop_contents();
+  // strip the start, parity, and stop bits
+  return (KBD_PIO->rxf[kbd_sm] >> 22) & 0xff;
+}
+
+// Clear any keystrokes that occur in the next milliseconds.
+void kbd_clear_input(uint32_t ms) {
+  uint64_t delta_usec = 1000 * ms;
+  uint64_t deadline_usec = time_us_64() + delta_usec;
+
+  while(time_us_64() < deadline_usec) {
+    printf("dropping key\n");
+    int32_t key = kbd_getc();
+    while(key > 0)  {
+      printf("dropping key %x\n", key);
+      key = kbd_getc();
+    }
+    sleep_ms(200);
+  }
+}
+

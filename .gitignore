@@ -1,3 +1,7 @@
+# Build dirs.
+firmware/build/
+
+
 # Prerequisites
 *.d
 
