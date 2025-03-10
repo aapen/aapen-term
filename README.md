@@ -9,6 +9,9 @@ Aapen-term consists of two main parts:
 * There is board, based on the Raspberry Pi Pico 2040 which had connections for a UART, a VGA monitor and a PS2 keyboard.
 * And there is the firmware that runs on the board.
 
+Note that the VGA code is based on the original by Hunter Adams (vha3@cornell.edu),
+which can be found [on github](https://github.com/vha3/Hunter-Adams-RP2040-Demos/tree/master/VGA_Graphics).
+
 ## Building the firmware
 
 1. Make a build directory: `firmware/build`.

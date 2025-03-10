@@ -1,32 +1,3 @@
-/**
- * Hunter Adams (vha3@cornell.edu)
- * 
- * HARDWARE CONNECTIONS
- *  - GPIO 16 ---> VGA Hsync
- *  - GPIO 17 ---> VGA Vsync
- *  - GPIO 18 ---> 470 ohm resistor ---> VGA Green 
- *  - GPIO 19 ---> 330 ohm resistor ---> VGA Green
- *  - GPIO 20 ---> 330 ohm resistor ---> VGA Blue
- *  - GPIO 21 ---> 330 ohm resistor ---> VGA Red
- *  - RP2040 GND ---> VGA GND
- * 
- * RESOURCES USED
- *  - PIO state machines 0, 1, and 2 on PIO instance 0
- *  - DMA channels obtained by claim mechanism
- *  - 153.6 kBytes of RAM (for pixel color data)
- *
- * Protothreads v1.1.3
- * Threads:
- * core 0:
- * Graphics demo
- * blink LED25 
- * core 1:
- * Toggle gpio 4 
- * Serial i/o 
- */
-// ==========================================
-// === VGA graphics library
-// ==========================================
 #include "vga16_graphics.h"
 #include <stdio.h>
 #include <stdlib.h>
