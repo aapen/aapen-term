@@ -2,6 +2,7 @@
 add_executable(term)
 add_executable(test_ps2)
 add_executable(test_vga)
+add_executable(test_vga_pins)
 
 # must match with pio filename and executable name from above
 pico_generate_pio_header(term ${CMAKE_CURRENT_LIST_DIR}/hsync.pio)
@@ -52,6 +53,22 @@ target_link_libraries(test_ps2 PRIVATE
 pico_enable_stdio_usb(test_ps2 1)
 pico_enable_stdio_uart(test_ps2 0)
 pico_add_extra_outputs(test_ps2)
+
+# VGA pin test program
+
+target_sources(test_vga_pins PRIVATE 
+	test_vga_pins.c
+)
+
+target_link_libraries(test_vga_pins PRIVATE 
+	pico_stdlib 
+	pico_bootsel_via_double_reset 
+)
+
+pico_enable_stdio_usb(test_vga_pins 1)
+pico_enable_stdio_uart(test_vga_pins 0)
+# pico_add_extra_outputs(test_vga_pins)
+
 
 
 # VGA test program
