@@ -9,7 +9,7 @@
 #include "string.h"
 
 
-void pulse(pin, n) {
+void pulse(int pin, int n) {
     for(int j=0; j<n; j++) {
         gpio_put(pin, 1);
         sleep_ms(2);
@@ -31,19 +31,19 @@ int main(){
 
   for(int i=start_pin; i<=end_pin; i++) {
      gpio_init(i); 
-     gpio_set_dir(true);
-     gpio_put(p, 0);
+     gpio_set_dir(i, true);
+     gpio_put(i, 0);
   }
 
   for(;;) {
     printf("loop\n");
     for(int i=start_pin; i<=end_pin; i++) {
-        hi_digit = i / 10;
-        low_digit = i % 10;
+        int hi_digit = i / 10;
+        int low_digit = i % 10;
         pulse(i, hi_digit);
         sleep_ms(4);
         pulse(i, low_digit);
-        sleep_ms(8)
+        sleep_ms(8);
     }
     sleep_ms(1000);
   }

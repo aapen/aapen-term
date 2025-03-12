@@ -67,7 +67,7 @@ target_link_libraries(test_vga_pins PRIVATE
 
 pico_enable_stdio_usb(test_vga_pins 1)
 pico_enable_stdio_uart(test_vga_pins 0)
-# pico_add_extra_outputs(test_vga_pins)
+pico_add_extra_outputs(test_vga_pins)
 
 
 
